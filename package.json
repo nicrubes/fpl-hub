@@ -1,0 +1,11 @@
+{
+  "name": "fpl-hub",
+  "private": true,
+  "type": "module",
+  "description": "Personal FPL Draft waiver reminders and player lists",
+  "scripts": {
+    "build": "node build.js",
+    "preview": "node build.js --preview"
+  },
+  "engines": { "node": ">=20" }
+}

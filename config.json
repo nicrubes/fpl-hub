@@ -1,0 +1,13 @@
+{
+  "leagueId": 39805,
+  "entryId": 208225,
+  "timezone": "Europe/London",
+  "normalLeadHours": 24,
+  "tightLeadHours": 48,
+  "tightGapHours": 36,
+  "redraftLeadHours": 24,
+  "gwEndBufferHours": 2,
+  "listDepth": 20,
+  "hiddenPickMaxDraftRank": 150,
+  "scheduleWeeksShown": 8
+}
