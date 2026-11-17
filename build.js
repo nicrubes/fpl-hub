@@ -18,6 +18,8 @@ import { renderPage } from './lib/page.js';
 import { lockPage } from './lib/lock.js';
 import { gameweekEmail, redraftEmail } from './lib/email.js';
 import { sendMail } from './lib/smtp.js';
+import { buildChallenge } from './lib/challenge.js';
+import { challengeDue, challengeEmail } from './lib/challenge-email.js';
 
 const args = new Set(process.argv.slice(2));
 const cfg = JSON.parse(fs.readFileSync(new URL('./config.json', import.meta.url), 'utf8'));
@@ -28,9 +30,22 @@ const now = process.env.FPL_NOW ? new Date(process.env.FPL_NOW) : new Date();
 const siteUrl = process.env.SITE_URL || cfg.siteUrl || '';
 const passcode = process.env.FPL_PASSCODE || null;
 
-const { model, state: tracked } = await buildModel(cfg, { now, state, passcode });
+const { model, state: tracked, raw } = await buildModel(cfg, { now, state, passcode });
 state.status = tracked.status;
 state.fitSince = tracked.fitSince;
+
+// ----- Challenge tab (part 3). A Challenge problem must never stop the Draft site or email.
+try {
+  const ch = await buildChallenge({ raw, state, now });
+  model.challenge = ch.model;
+  state.challengeCopy = ch.copy;
+  const C = ch.model;
+  console.log(C.none ? `Challenge: ${C.message}` : `Challenge GW${C.gw} "${C.title}": read as "${C.readAs}" (${C.ruleSource}). Six: ${C.picks.map(p => p.name + (p.id === C.captain ? ' (C)' : '')).join(', ')}.`);
+  if (ch.copy?.error) console.log('Challenge rule wording:', ch.copy.error);
+} catch (err) {
+  console.error('Challenge tab failed:', err.message);
+  model.challenge = { error: err.message };
+}
 const inner = renderPage(model);
 console.log(`Built data for GW${model.targetGw} (last GW${model.lastGw}, final: ${model.lastGwFinal}).`);
 console.log(model.predictions
@@ -46,6 +61,10 @@ if (args.has('--preview')) {
     const e = gameweekEmail(model, gw, siteUrl);
     fs.writeFileSync('preview/email.html', `<!-- Subject: ${e.subject} -->\n` + e.html);
     console.log('Email subject would be:', e.subject);
+  }
+  if (model.challenge && !model.challenge.none && !model.challenge.error) {
+    const ce = challengeEmail(model, siteUrl);
+    fs.writeFileSync('preview/challenge-email.html', `<!-- Subject: ${ce.subject} -->\n` + ce.html);
   }
   if (passcode) fs.writeFileSync('preview/locked.html', await lockPage(inner, passcode));
   console.log('Preview written to ./preview');
@@ -66,12 +85,14 @@ if (!args.has('--preview')) {
 // ----- emails
 const mailReady = process.env.SMTP_USER && process.env.SMTP_PASS && process.env.EMAIL_TO;
 const due = dueEmails(model, state, now);
+const chDue = challengeDue(model, state, now);
+if (chDue) due.push(chDue);
 if (args.has('--test-email')) {
   const gw = model.schedule.gameweeks.find(r => r.gw === model.targetGw);
   if (gw) due.push({ key: null, kind: 'gameweek', gw, test: true });
 }
 for (const d of due) {
-  const e = d.kind === 'gameweek' ? gameweekEmail(model, d.gw, siteUrl) : redraftEmail(model, d.redraft, siteUrl);
+  const e = d.kind === 'gameweek' ? gameweekEmail(model, d.gw, siteUrl) : d.kind === 'challenge' ? challengeEmail(model, siteUrl) : redraftEmail(model, d.redraft, siteUrl);
   if (d.test) e.subject = '[Test] ' + e.subject;
   if (!mailReady) { console.log(`Email due (${d.key || 'test'}) but email secrets are not set: "${e.subject}"`); continue; }
   if (args.has('--preview') && !d.test) { console.log(`Would send: ${e.subject}`); continue; }
