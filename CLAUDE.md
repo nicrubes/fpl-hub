@@ -10,7 +10,8 @@ Nic's FPL Draft helper. Full history: `D:\Claude\Notes\03 FPL Hub\Project summar
 
 ## How this project is set up
 - Plain Node.js, no npm packages. `build.js` runs hourly on GitHub Actions (`.github/workflows/hourly.yml`): pulls public FPL Draft data, reads the locked FPL Form files, builds the locked page (`lib/lock.js`, AES-256) and sends the email when due.
-- **No git on the PC.** Publish by uploading changed files on github.com (`/upload/main/<folder>`) in Claude in Chrome (Nic is signed in there; the built-in browser isn't), or with the desktop key in `settings.json` via the GitHub API (ask Nic first). Then run the workflow from the Actions tab. Check GitHub's copy hasn't changed before overwriting (`state.json` is updated by the job itself, so don't upload it).
+- **Publishing (preferred, added 17 Nov 2026):** `node tools/publish.js --check` lists what differs from GitHub and stops if GitHub has a newer copy of any file; `node tools/publish.js -m "what changed" [files]` uploads them as ONE commit with the desktop key, runs the site update and prints the build log. Ask Nic before publishing. Never uploads `state.json` or `data/`.
+- **No git on the PC.** Otherwise publish by uploading changed files on github.com (`/upload/main/<folder>`) in Claude in Chrome (Nic is signed in there; the built-in browser isn't), or with the desktop key in `settings.json` via the GitHub API (ask Nic first). Then run the workflow from the Actions tab. Check GitHub's copy hasn't changed before overwriting (`state.json` is updated by the job itself, so don't upload it).
 - Player matching: FPL Form uses main-game IDs; match to Draft players through `code` (`lib/predictions.js`).
 - Scouting/waiver logic: `lib/scout.js` (approved by Nic; change it only with his OK).
 
