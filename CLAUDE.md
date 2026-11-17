@@ -23,6 +23,14 @@ Nic's FPL Draft helper. Full history: `D:\Claude\Notes\03 FPL Hub\Project summar
 - Tests: `node tools/test-challenge-rules.js` (every published rule read correctly), `node tools/test-challenge.js [gw]` (the six, optionally with another week's rule).
 - FPL Challenge terms ban "automated systems"; Nic accepted that risk on 17 Nov 2026.
 
+## Superbru tab (part 2, built 17 Nov 2026)
+- Code: `lib/superbru.js` (main: odds timing, safety rules, freezing picks at kick-off, week archive, script-written sentences, round summary), `lib/superbru-odds.js` (The Odds API pull, consensus prices, team-name map), `lib/superbru-model.js` (goals model + best Superbru pick), `lib/superbru-page.js` (tab, design "A + C merged"), `lib/superbru-email.js` (line in the Draft email + matchday email 3h before the first kick-off). Plan: `Notes\03 FPL Hub\Plan - part 2 Superbru.md`.
+- **No odds, no pick.** Never estimate, fill in or carry over odds. Every failure path must end in "no pick" plus a reason. Run `node tools/test-superbru.js` after any change (24 broken-case tests, no internet, no credits).
+- Odds: secret `ODDS_API_KEY` (free plan, 500 credits/month, 2 credits per pull). Local copy of the key: `%USERPROFILE%\.fplhub\odds-api-key.txt` (read it into the env, never print it). Set `FPL_CACHE` when testing so repeat runs reuse one pull. `tools/superbru-dry-run.js` prints the picks without building the site.
+- Saved, locked with the site passcode: `data/superbru/live.json` (latest odds, first-seen chances, picks at email time) and `data/superbru/gw-NN.json` (picks frozen at kick-off + results). The workflow commits `data/superbru`. **If the passcode changes, these must be re-locked too** (or they start fresh).
+- No AI and no paid service anywhere. The "Ask Claude for a write-up" button only copies a fact sheet for Nic's own Claude app.
+- Superbru's terms (4.2(5)) ban automated interaction: never enter picks on Superbru.
+
 ## Testing before saying it's done
 1. `node build.js --preview` with `FPL_FORM_CSV` set to the Downloads CSV(s), and `FPL_PASSCODE` set to a throwaway test code to also get `preview/locked.html`.
 2. Start the "fpl-hub-preview" server (`D:\Claude\.claude\launch.json`, port 5178) and check `site.html`, `email.html` and **`locked.html` with the test code typed into the real lock screen** (the page and lock screen once clashed and showed a blank page). Add `?v=N` to the address after a rebuild: the browser keeps old copies. Don't pipe `build.js` output into `Select-Object -First`: it stops the build before the files are written.

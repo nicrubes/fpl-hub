@@ -9,5 +9,6 @@
   "gwEndBufferHours": 2,
   "listDepth": 20,
   "hiddenPickMaxDraftRank": 150,
-  "scheduleWeeksShown": 8
+  "scheduleWeeksShown": 8,
+  "superbru": { "minBooks": 3, "staleHours": 24, "matchdayLeadHours": 3, "kickoffToleranceMins": 60, "lowCredits": 60 }
 }

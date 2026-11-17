@@ -7,6 +7,7 @@
 //   SMTP_USER     – Gmail address the email is sent from
 //   SMTP_PASS     – Gmail "app password" (not the normal Gmail password)
 //   EMAIL_TO      – where the reminder goes (can be the same address)
+//   ODDS_API_KEY  – The Odds API key for the Superbru tab (free plan)
 //
 // Options:  --preview     write unlocked preview + email preview to ./preview (never published)
 //           --test-email  send the current gameweek email now (to check email works)
@@ -20,6 +21,8 @@ import { gameweekEmail, redraftEmail } from './lib/email.js';
 import { sendMail } from './lib/smtp.js';
 import { buildChallenge } from './lib/challenge.js';
 import { challengeDue, challengeEmail } from './lib/challenge-email.js';
+import { buildSuperbru, loadStore, saveStore, markEmailPicks } from './lib/superbru.js';
+import { superbruDue, superbruEmail } from './lib/superbru-email.js';
 
 const args = new Set(process.argv.slice(2));
 const cfg = JSON.parse(fs.readFileSync(new URL('./config.json', import.meta.url), 'utf8'));
@@ -46,6 +49,19 @@ try {
   console.error('Challenge tab failed:', err.message);
   model.challenge = { error: err.message };
 }
+
+// ----- Superbru tab (part 2). Same rule: a Superbru problem must never stop the rest.
+let sbStore = null;
+try {
+  sbStore = await loadStore(passcode);
+  const sb = await buildSuperbru({ cfg, raw, now, passcode, key: process.env.ODDS_API_KEY || null, store: sbStore });
+  model.superbru = sb.model;
+  for (const l of sb.log) console.log(l);
+  for (const b of sb.model.banner || []) console.log('Superbru notice:', b[1]);
+} catch (err) {
+  console.error('Superbru tab failed:', err.message);
+  model.superbru = { error: err.message };
+}
 const inner = renderPage(model);
 console.log(`Built data for GW${model.targetGw} (last GW${model.lastGw}, final: ${model.lastGwFinal}).`);
 console.log(model.predictions
@@ -65,6 +81,10 @@ if (args.has('--preview')) {
   if (model.challenge && !model.challenge.none && !model.challenge.error) {
     const ce = challengeEmail(model, siteUrl);
     fs.writeFileSync('preview/challenge-email.html', `<!-- Subject: ${ce.subject} -->\n` + ce.html);
+  }
+  if (model.superbru?.weeks) {
+    const se = superbruEmail(model, siteUrl);
+    fs.writeFileSync('preview/superbru-email.html', `<!-- Subject: ${se.subject} -->\n` + se.html);
   }
   if (passcode) fs.writeFileSync('preview/locked.html', await lockPage(inner, passcode));
   console.log('Preview written to ./preview');
@@ -87,12 +107,15 @@ const mailReady = process.env.SMTP_USER && process.env.SMTP_PASS && process.env.
 const due = dueEmails(model, state, now);
 const chDue = challengeDue(model, state, now);
 if (chDue) due.push(chDue);
+const sbDue = superbruDue(model, state, now, cfg.superbru?.matchdayLeadHours);
+if (sbDue) due.push(sbDue);
 if (args.has('--test-email')) {
   const gw = model.schedule.gameweeks.find(r => r.gw === model.targetGw);
   if (gw) due.push({ key: null, kind: 'gameweek', gw, test: true });
 }
 for (const d of due) {
-  const e = d.kind === 'gameweek' ? gameweekEmail(model, d.gw, siteUrl) : d.kind === 'challenge' ? challengeEmail(model, siteUrl) : redraftEmail(model, d.redraft, siteUrl);
+  const e = d.kind === 'gameweek' ? gameweekEmail(model, d.gw, siteUrl) : d.kind === 'challenge' ? challengeEmail(model, siteUrl)
+    : d.kind === 'superbru' ? superbruEmail(model, siteUrl) : redraftEmail(model, d.redraft, siteUrl);
   if (d.test) e.subject = '[Test] ' + e.subject;
   if (!mailReady) { console.log(`Email due (${d.key || 'test'}) but email secrets are not set: "${e.subject}"`); continue; }
   if (args.has('--preview') && !d.test) { console.log(`Would send: ${e.subject}`); continue; }
@@ -100,9 +123,14 @@ for (const d of due) {
     await sendMail({ user: process.env.SMTP_USER, pass: process.env.SMTP_PASS, to: process.env.EMAIL_TO, ...e });
     console.log('Sent:', e.subject);
     if (d.key) state.sent[d.key] = now.toISOString();
+    if (d.kind === 'gameweek' && d.key) markEmailPicks(sbStore, model, d.gw.gw); // to flag picks that change later
   } catch (err) {
     console.error('Email failed:', err.message);
     process.exitCode = 1;
   }
 }
-if (!args.has('--preview')) fs.writeFileSync(statePath, JSON.stringify(state) + '\n');
+if (!args.has('--preview')) {
+  fs.writeFileSync(statePath, JSON.stringify(state) + '\n');
+  try { const n = await saveStore(sbStore, passcode); if (n) console.log(`Superbru: saved ${n} locked file(s) in data/superbru.`); }
+  catch (err) { console.error('Superbru: saving failed:', err.message); }
+}
