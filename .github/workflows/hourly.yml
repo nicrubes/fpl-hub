@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +58,21 @@ jobs:
         with:
           path: site
 
+      # GitHub sometimes can't "see" the site files for a few seconds after
+      # they're uploaded ("No artifacts named github-pages were found").
+      # So: wait a moment, try, and if that fails wait longer and try again.
+      # Only if the second try also fails does the run count as failed.
+      - if: hashFiles('site/index.html') != ''
+        run: sleep 15
+
       - if: hashFiles('site/index.html') != ''
         id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - if: hashFiles('site/index.html') != '' && steps.deploy.outcome == 'failure'
+        run: sleep 60
+
+      - if: hashFiles('site/index.html') != '' && steps.deploy.outcome == 'failure'
+        id: deploy_retry
         uses: actions/deploy-pages@v4
